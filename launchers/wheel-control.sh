@@ -9,4 +9,5 @@ dt-launchfile-init
 rosrun my_package wheel_control_node.py
 
 # wait for app to end
+dt-launchfile-join
 
