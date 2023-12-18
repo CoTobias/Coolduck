@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
 import rospy
+from duckietown.dtros import DTROS, NodeType
 from duckietown_msgs.msg import SegmentList, Segment
-from std_msgs.msg import String
 import threading
 from visualization_msgs.msg import Marker, MarkerArray
 
 
 
-class ShowMapNode(object):
-    def __init__(self):
+class ShowMapNode(DTROS):
+    def __init__(self, node_name):
+        # initialize the DTROS parent class
+        super(ShowMapNode, self).__init__(node_name=node_name, node_type=NodeType.PERCEPTION)
         self.sub_seg=rospy.Subscriber('~lineseglist_in',SegmentList, self.cbLineSegList, queue_size=1)
         self.pub_map = rospy.Publisher("~lane_map", MarkerArray, queue_size=1)
         self.seg_list = []
@@ -78,5 +80,5 @@ class ShowMapNode(object):
 
 if __name__ == '__main__':
     rospy.init_node('show_map', anonymous=True)
-    show_map_node = ShowMapNode()
+    show_map_node = ShowMapNode(node_name='map')
     rospy.spin()
