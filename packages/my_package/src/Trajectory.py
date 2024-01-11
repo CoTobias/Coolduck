@@ -22,13 +22,13 @@ class WheelEncoderReaderNode(DTROS):
         self._left_encoder_topic = f"/{self._vehicle_name}/left_wheel_encoder_node/tick"
         self._right_encoder_topic = f"/{self._vehicle_name}/right_wheel_encoder_node/tick"
 
-        # we even have the velocity here that i can use
         # temporary data storage
         self._ticks_left = None
         self._ticks_right = None
         # construct subscriber
         self.sub_left = rospy.Subscriber(self._left_encoder_topic, WheelEncoderStamped, self.callback_left)
         self.sub_right = rospy.Subscriber(self._right_encoder_topic, WheelEncoderStamped, self.callback_right)
+
 
         # Visualisation stuff
         self.speed = speed
@@ -52,6 +52,7 @@ class WheelEncoderReaderNode(DTROS):
         rospy.loginfo_once(f"Left encoder type: {data.type}")
         # store data value
         self._ticks_left = data.data
+        self.update(node)
 
     def callback_right(self, data):
         # log general information once at the beginning
@@ -59,6 +60,7 @@ class WheelEncoderReaderNode(DTROS):
         rospy.loginfo_once(f"Right encoder type: {data.type}")
         # store data value
         self._ticks_right = data.data
+        self.update(node)
 
     def calculate_coordinates(self):
 
@@ -137,8 +139,6 @@ class WheelEncoderReaderNode(DTROS):
                 self.left_ticks_change_2 = self.left_ticks
                 return x, y
 
-        return x, y
-
     def update(self, frame):
         result = self.calculate_coordinates()
         if result is not None:
@@ -155,17 +155,20 @@ class WheelEncoderReaderNode(DTROS):
     def run(self):
         # publish received tick messages every 0.05 second (20 Hz)
         rate = rospy.Rate(20)
-        # continue as long as it is not shutdown
         while not rospy.is_shutdown():
             if self._ticks_right is not None and self._ticks_left is not None:
                 # start printing values when received from both encoders
                 msg = f"Wheel encoder ticks [LEFT, RIGHT]: {self._ticks_left}, {self._ticks_right}"
                 rospy.loginfo(msg)
-                rate.sleep()
+                rospy.loginfo(self.calculate_coordinates(self))
+                rospy.loginfo(self.update(self,))
+            rate.sleep()
+
+
 
 if __name__ == '__main__':
     # create the node
-    node = WheelEncoderReaderNode(node_name='wheel_encoder_reader_node', wheel_radius=0.05, wheel_distance=0.2, slippage_factor=0.95, speed=1)
+    node = WheelEncoderReaderNode(node_name='wheel_encoder_reader_node', wheel_radius=0.05, wheel_distance=0.2, slippage_factor = 0.95, speed=1)
     # if graph too small load again with bigger
 
     #Visualisation
@@ -175,7 +178,8 @@ if __name__ == '__main__':
     sc = ax.scatter([], [])
     line, = ax.plot([], [], color='blue')
 
-    coordinates = []
+    # Initialize coordinates list
+    coordinates = [(0, 0)]
     animation = FuncAnimation(fig, node.update, interval=50, frames=20, repeat=False)
 
     # Show the plot

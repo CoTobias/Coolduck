@@ -1,40 +1,19 @@
-#!/usr/bin/env python3
-
-import os
-import rospy
-
 import math
+import time
+
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-from duckietown.dtros import DTROS, NodeType
-from duckietown_msgs.msg import WheelEncoderStamped
 
+class TrajectoryCalculator:
 
-
-class WheelEncoderReaderNode(DTROS):
-
-    def __init__(self, node_name, wheel_radius, wheel_distance, slippage_factor, speed):
-        # initialize the DTROS parent class
-        super(WheelEncoderReaderNode, self).__init__(node_name=node_name, node_type=NodeType.PERCEPTION)
-        # static parameters
-        self._vehicle_name = os.environ['VEHICLE_NAME']
-        self._left_encoder_topic = f"/{self._vehicle_name}/left_wheel_encoder_node/tick"
-        self._right_encoder_topic = f"/{self._vehicle_name}/right_wheel_encoder_node/tick"
-
-        # we even have the velocity here that i can use
-        # temporary data storage
-        self._ticks_left = None
-        self._ticks_right = None
-        # construct subscriber
-        self.sub_left = rospy.Subscriber(self._left_encoder_topic, WheelEncoderStamped, self.callback_left)
-        self.sub_right = rospy.Subscriber(self._right_encoder_topic, WheelEncoderStamped, self.callback_right)
-
-        # Visualisation stuff
+    def __init__(self, wheel_radius, wheel_distance, slippage_factor, speed):
         self.speed = speed
         self.wheel_radius = wheel_radius
         self.wheel_distance = wheel_distance
         self.slippage_factor = slippage_factor
+        self.left_ticks = 0
+        self.right_ticks = 0
 
         self.right_ticks_change = 0
         self.left_ticks_change = 0
@@ -46,19 +25,12 @@ class WheelEncoderReaderNode(DTROS):
         self.delta_theta = 0  # Initialize delta_theta
         self.a = False
 
-    def callback_left(self, data):
-        # log general information once at the beginning
-        rospy.loginfo_once(f"Left encoder resolution: {data.resolution}")
-        rospy.loginfo_once(f"Left encoder type: {data.type}")
-        # store data value
-        self._ticks_left = data.data
+    def update_ticks(self, left_ticks, right_ticks):
+        # Update encoder ticks
+        self.left_ticks = left_ticks
+        self.right_ticks = right_ticks
+        self.update(calculator)
 
-    def callback_right(self, data):
-        # log general information once at the beginning
-        rospy.loginfo_once(f"Right encoder resolution: {data.resolution}")
-        rospy.loginfo_once(f"Right encoder type: {data.type}")
-        # store data value
-        self._ticks_right = data.data
 
     def calculate_coordinates(self):
 
@@ -66,7 +38,7 @@ class WheelEncoderReaderNode(DTROS):
         self.left_ticks_change = self.left_ticks - self.left_ticks_change
 
         # Check if the condition is met
-        if self.left_ticks_change == 0 and self.right_ticks_change == 0:  # what is one of them changed
+        if self.left_ticks_change == 0 and self.right_ticks_change == 0: # what is one of them changed
             self.a = True
             return None  # or any other default value
         else:
@@ -78,9 +50,9 @@ class WheelEncoderReaderNode(DTROS):
                 changeright_true = self.right_ticks - self.right_ticks_change_2
                 changeleft_true = self.left_ticks - self.left_ticks_change_2
 
-                if changeright_true == 0 and changeleft_true == 0:  # still zero
+                if changeright_true == 0 and changeleft_true == 0:  #still zero
                     return None
-                else:  # has been zero but changed
+                else:   #has been zero but changed
                     # Calculate traveled distances for each wheel with slippage factor
                     left_distance = 2 * self.wheel_radius * self.left_ticks * self.slippage_factor
                     right_distance = 2 * self.wheel_radius * self.right_ticks * self.slippage_factor
@@ -142,41 +114,47 @@ class WheelEncoderReaderNode(DTROS):
     def update(self, frame):
         result = self.calculate_coordinates()
         if result is not None:
-            x, y = result
+            x , y = result
             coordinates.append((x, y))
             print(coordinates)
             # Update scatter plot
             sc.set_offsets(coordinates)
-
             # Update lines
             if len(coordinates) > 1:
                 line.set_data(zip(*coordinates))
 
-    def run(self):
-        # publish received tick messages every 0.05 second (20 Hz)
-        rate = rospy.Rate(20)
-        # continue as long as it is not shutdown
-        while not rospy.is_shutdown():
-            if self._ticks_right is not None and self._ticks_left is not None:
-                # start printing values when received from both encoders
-                msg = f"Wheel encoder ticks [LEFT, RIGHT]: {self._ticks_left}, {self._ticks_right}"
-                rospy.loginfo(msg)
-                rate.sleep()
 
-if __name__ == '__main__':
-    # create the node
-    node = WheelEncoderReaderNode(node_name='wheel_encoder_reader_node', wheel_radius=0.05, wheel_distance=0.2, slippage_factor=0.95, speed=1)
-    # if graph too small load again with bigger
+if __name__ == "__main__":
+    # Initialize the TrajectoryCalculator with wheel properties
+    calculator = TrajectoryCalculator(wheel_radius=0.05, wheel_distance=0.2, slippage_factor=0.95, speed=1)
 
-    #Visualisation
+    # ** VISUALISATION START
 
     # Set up the initial plot
     fig, ax = plt.subplots()
     sc = ax.scatter([], [])
     line, = ax.plot([], [], color='blue')
 
-    coordinates = []
-    animation = FuncAnimation(fig, node.update, interval=50, frames=20, repeat=False)
+    # Initialize coordinates list
+    coordinates = [(0,0)]
+
+
+    # instead of updating every sec with one coordinate i upate every second but with 20
+
+    # Set up the animation
+
+    # In this case, interval=50 means that each frame will have an interval of 50 milliseconds.
+    # Since I want 20 frames per second, I set the interval to 50 milliseconds to achieve the desired update rate.
+    animation = FuncAnimation(fig, calculator.update, interval=50, frames=20, repeat=False)
+
+
+    calculator.update_ticks(300, 300)
+    calculator.update_ticks(350, 300)
+    calculator.update_ticks(350, 350)
+    calculator.update_ticks(380, 390)
+
+
+
 
     # Show the plot
     plt.xlim(-10, 10)
@@ -188,9 +166,4 @@ if __name__ == '__main__':
     plt.show()
     # ** VISUALISATION END
 
-    #create class
-    # run the timer in node
-    node.run()
-    # keep spinning -> keeps ros running and processing callbacks
-    rospy.spin()
-
+    # if graph too small load again with bigger
