@@ -6,7 +6,6 @@ import rospy
 import math
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-
 from duckietown.dtros import DTROS, NodeType
 from duckietown_msgs.msg import WheelEncoderStamped
 
