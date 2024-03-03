@@ -116,7 +116,6 @@ class TrajectoryCalculator:
         if result is not None:
             x , y = result
             coordinates.append((x, y))
-            print(coordinates)
             # Update scatter plot
             sc.set_offsets(coordinates)
             # Update lines
@@ -153,8 +152,14 @@ if __name__ == "__main__":
     calculator.update_ticks(350, 350)
     calculator.update_ticks(380, 390)
 
+    # class that transforms my coordinates with array coordinates
+    # it tests with approximation which tile is where.
 
+    # google firebase
+    # Connect online database to the online thing
 
+    # Communication of phone and Duckiebot
+    print(coordinates)
 
     # Show the plot
     plt.xlim(-10, 10)
@@ -165,5 +170,6 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.show()
     # ** VISUALISATION END
+
 
     # if graph too small load again with bigger

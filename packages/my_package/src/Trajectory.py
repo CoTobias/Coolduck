@@ -2,10 +2,7 @@
 
 import os
 import rospy
-
 import math
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 from duckietown.dtros import DTROS, NodeType
 from duckietown_msgs.msg import WheelEncoderStamped
 
@@ -143,13 +140,6 @@ class WheelEncoderReaderNode(DTROS):
         if result is not None:
             x, y = result
             coordinates.append((x, y))
-            print(coordinates)
-            # Update scatter plot
-            sc.set_offsets(coordinates)
-
-            # Update lines
-            if len(coordinates) > 1:
-                line.set_data(zip(*coordinates))
 
     def run(self):
         # publish received tick messages every 0.05 second (20 Hz)
@@ -169,31 +159,12 @@ if __name__ == '__main__':
     # create the node
     node = WheelEncoderReaderNode(node_name='wheel_encoder_reader_node', wheel_radius=0.05, wheel_distance=0.2, slippage_factor = 0.95, speed=1)
     # if graph too small load again with bigger
-
-    #Visualisation
-
-    # Set up the initial plot
-    fig, ax = plt.subplots()
-    sc = ax.scatter([], [])
-    line, = ax.plot([], [], color='blue')
-
     # Initialize coordinates list
-    coordinates = [(0, 0)]
-    animation = FuncAnimation(fig, node.update, interval=50, frames=20, repeat=False)
-
-    # Show the plot
-    plt.xlim(-10, 10)
-    plt.ylim(-10, 10)
-    plt.title('Real-time Coordinates Visualization with Lines')
-    plt.xlabel('X-axis')
-    plt.ylabel('Y-axis')
-    plt.grid(True)
-    plt.show()
-    # ** VISUALISATION END
-
+    coordinates = [(0.0, 0.0)]
     #create class
     # run the timer in node
     node.run()
+    print(coordinates)
     # keep spinning -> keeps ros running and processing callbacks
     rospy.spin()
 
