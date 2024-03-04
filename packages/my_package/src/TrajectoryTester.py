@@ -4,6 +4,8 @@ import time
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+from packages.my_package.src.TrackCalculator import TrackCalculator
+
 
 class TrajectoryCalculator:
 
@@ -148,9 +150,11 @@ if __name__ == "__main__":
 
 
     calculator.update_ticks(300, 300)
-    calculator.update_ticks(350, 300)
-    calculator.update_ticks(350, 350)
-    calculator.update_ticks(380, 390)
+    calculator.update_ticks(303, 301)
+    calculator.update_ticks(305, 304)
+    calculator.update_ticks(306, 306)
+
+
 
     # class that transforms my coordinates with array coordinates
     # it tests with approximation which tile is where.
@@ -160,7 +164,9 @@ if __name__ == "__main__":
 
     # Communication of phone and Duckiebot
     print(coordinates)
-
+    track_calculator_instance = TrackCalculator(coordinates)
+    track_segments = track_calculator_instance.analyze_track()
+    print(f"Track segments over the 10 seconds: {track_segments}")
     # Show the plot
     plt.xlim(-10, 10)
     plt.ylim(-10, 10)
