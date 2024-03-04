@@ -9,7 +9,6 @@ class TrackCalculator:
     slightly_curved_straight_line = [(x, y + x // 5) for x, y in zip(range(50), [0] * 50)]
     slightly_curved_right_curve = [(x, y - x // 5) for x, y in zip(range(50), range(50))]
     slightly_curved_left_curve = [(x, y + x // 5) for x, y in zip(range(50), range(50))]
-    #coordinates = slightly_curved_right_curve = [(x, y - x // 5) for x, y in zip(range(50), range(50))]
 
     tuple_coordinates = ()
     direction = "EAST"
