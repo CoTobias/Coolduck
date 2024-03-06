@@ -6,7 +6,7 @@ source /environment.sh
 dt-launchfile-init
 
 # launch subscriber
-rosrun my_package odometry.py
+rosrun my_package Trajectory.py
 
 # wait for app to end
 dt-launchfile-join
