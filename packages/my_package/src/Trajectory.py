@@ -8,10 +8,8 @@ from duckietown_msgs.msg import WheelEncoderStamped
 import matplotlib.pyplot as plt
 
 
-
 class Trajectory(DTROS):
     coordinates = [(0.0, 0.0)]
-    track_segments = ''
     direction = ''
     moverX = []
     moverY = []
@@ -23,7 +21,8 @@ class Trajectory(DTROS):
     left_Ticks_change_Number = 0
     start_time = 0
     end_time = 0
-
+    track_segments = []
+    zähler = 0
 
     def __init__(self, node_name, wheel_radius, wheel_distance, slippage_factor, speed):
         # initialize the DTROS parent class
@@ -75,6 +74,7 @@ class Trajectory(DTROS):
         else:
             self._ticks_left = data.data
             self.firstLeft_tick = self._ticks_left
+
     def callback_right(self, data):
         # log general information once at the beginning
         rospy.loginfo_once(f"Right encoder resolution: {data.resolution}")
@@ -98,13 +98,16 @@ class Trajectory(DTROS):
         right_ticks_change = self._ticks_right - Trajectory.Old_right_ticks
 
         if left_ticks_change == 0 and right_ticks_change == 0:
-            Trajectory.right_Ticks_change_Number = right_ticks_change + 1
-            Trajectory.left_Ticks_change_Number= left_ticks_change + 1
+            Trajectory.right_Ticks_change_Number = Trajectory.right_Ticks_change_Number + 1
+            Trajectory.left_Ticks_change_Number = Trajectory.left_Ticks_change_Number + 1
             # detect if end of track if no movement for more than 2 seconds (20HZ -> 20 messages / second)
-            if Trajectory.right_Ticks_change_Number > 40 and Trajectory.left_Ticks_change_Number > 40:
+            if Trajectory.right_Ticks_change_Number == 40 and Trajectory.left_Ticks_change_Number == 40:
                 Trajectory.end_of_track = True
             return None
         else:
+            # moving again so no end of track
+            Trajectory.left_Ticks_change_Number = 0
+            Trajectory.right_Ticks_change_Number = 0
             # every time we calculate something increase the end time
             Trajectory.end_time += 1
             # set old Trajectory to the updates value for next run
@@ -119,10 +122,10 @@ class Trajectory(DTROS):
         sl = self.distance_per_count * left_ticks_change
         sr = self.distance_per_count * right_ticks_change
 
-        mean_distance = (sr+sl)/2
+        mean_distance = (sr + sl) / 2
 
-        self.x = self.x + mean_distance * math.cos(self.theta)
-        self.y = self.y + mean_distance * math.sin(self.theta)
+        self.x = self.x + sr * math.cos(self.theta)
+        self.y = self.y + sl * math.sin(self.theta)
         self.theta += (sr - sl) / self.wheel_distance
 
         # Ensure that theta is in the range [-pi, pi]
@@ -210,13 +213,13 @@ class Trajectory(DTROS):
     """
 
     def analyze_track(self):
-        track_segments = []
         if Trajectory.end_of_track:
             # set movement pattern
-            track_segments.append(self.get_movement_pattern())
-            Trajectory.start_time = Trajectory.end_time + 1
-            Trajectory.end_of_track = False
-            return track_segments
+            pattern = self.get_movement_pattern()
+            if pattern is not None:
+                Trajectory.track_segments.append(pattern)
+            Trajectory.start_time = Trajectory.end_time
+            return Trajectory.track_segments
 
             """""
         i = 0
@@ -232,31 +235,43 @@ class Trajectory(DTROS):
             """
 
     def get_movement_pattern(self):
-        slope = self.calculate_slope()
-        Trajectory.slope.append(slope)
-        if slope > 0:
+        if Trajectory.end_time != 0:
+            slope = self.calculate_slope()
             print(slope)
-            return "STRAIGHT"
-        elif slope == 0:
-            return None
-        else:
-            print(slope)
-            return "LEFT CURVE"
+            if slope != 0:
+                Trajectory.slope.append(slope)
+            """"
+            if len(Trajectory.slope) > 1:
+                if Trajectory.slope[len(Trajectory.slope) - 1] > Trajectory.slope[len(Trajectory.slope) - 2] + 4:
+                    return "STRAIGHT"
+                elif slope == 0:
+                    return None
+                else:
+                    return "LEFT CURVE"
+            else:
+            """
+            if slope > 2:
+                return "STRAIGHT"
+            elif slope == 0:
+                return None
+            else:
+                return "LEFT CURVE"
 
     def calculate_slope(self):
         # calculate x and y resp.
-        start_x, start_y = self.coordinates[Trajectory.start_time]
-        end_x, end_y = self.coordinates[Trajectory.end_time]
+        if Trajectory.end_time != 0:
+            start_x, start_y = self.coordinates[Trajectory.start_time]
+            end_x, end_y = self.coordinates[Trajectory.end_time]
 
-        dx = end_x - start_x
-        dy = end_y - start_y
+            dx = end_x - start_x
+            dy = end_y - start_y
 
-        try:
-            slope = dx / dy
-            return slope
-        except ZeroDivisionError:
-            slope = dx
-            return slope
+            try:
+                slope = dx / dy
+                return slope
+            except ZeroDivisionError:
+                slope = dx
+                return slope
 
         """""
         if direction == "EAST":
@@ -301,13 +316,13 @@ class Trajectory(DTROS):
         i = 0
         while not rospy.is_shutdown():
             if self._ticks_right is not None and self._ticks_left is not None:
-                i = i + 1
                 self.update()
-                track_segments = self.analyze_track()
-                if i == 40:
-                    print(f"Track segments over the 10 seconds: {track_segments}")
+                self.analyze_track()
+                if Trajectory.end_of_track:
+                    print(f"Track segments over the 10 seconds: {Trajectory.track_segments}")
                     print(Trajectory.coordinates)
-                    i = 0
+                    # End of track finished
+                    Trajectory.end_of_track = False
             rate.sleep()
 
 
