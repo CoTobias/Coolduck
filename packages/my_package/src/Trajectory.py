@@ -5,6 +5,8 @@ import rospy
 import math
 from duckietown.dtros import DTROS, NodeType
 from duckietown_msgs.msg import WheelEncoderStamped
+import matplotlib.pyplot as plt
+
 
 
 class Trajectory(DTROS):
@@ -15,6 +17,13 @@ class Trajectory(DTROS):
     moverY = []
     Old_left_ticks = 0
     Old_right_ticks = 0
+    slope = []
+    end_of_track = False
+    right_Ticks_change_Number = 0
+    left_Ticks_change_Number = 0
+    start_time = 0
+    end_time = 0
+
 
     def __init__(self, node_name, wheel_radius, wheel_distance, slippage_factor, speed):
         # initialize the DTROS parent class
@@ -89,25 +98,36 @@ class Trajectory(DTROS):
         right_ticks_change = self._ticks_right - Trajectory.Old_right_ticks
 
         if left_ticks_change == 0 and right_ticks_change == 0:
+            Trajectory.right_Ticks_change_Number = right_ticks_change + 1
+            Trajectory.left_Ticks_change_Number= left_ticks_change + 1
+            # detect if end of track if no movement for more than 2 seconds (20HZ -> 20 messages / second)
+            if Trajectory.right_Ticks_change_Number > 40 and Trajectory.left_Ticks_change_Number > 40:
+                Trajectory.end_of_track = True
             return None
         else:
+            # every time we calculate something increase the end time
+            Trajectory.end_time += 1
             # set old Trajectory to the updates value for next run
             Trajectory.Old_left_ticks = self._ticks_left
             Trajectory.Old_right_ticks = self._ticks_right
             # use another method solely for calculation
             return self._calculate_coordinates(left_ticks_change, right_ticks_change)
+            # Track begins again or make sure that not end of track detected
 
     def _calculate_coordinates(self, left_ticks_change, right_ticks_change):
         # distance traveled with average distance per count calculated through distance_traveled/tick
         sl = self.distance_per_count * left_ticks_change
         sr = self.distance_per_count * right_ticks_change
 
-        self.x += (sr + sl) * math.cos(self.theta)
-        self.y += (sr + sl) * math.sin(self.theta)
+        mean_distance = (sr+sl)/2
+
+        self.x = self.x + mean_distance * math.cos(self.theta)
+        self.y = self.y + mean_distance * math.sin(self.theta)
         self.theta += (sr - sl) / self.wheel_distance
 
         # Ensure that theta is in the range [-pi, pi]
         self.theta = (self.theta + math.pi) % (2 * math.pi) - math.pi
+
         return self.x, self.y
 
     """""
@@ -189,10 +209,81 @@ class Trajectory(DTROS):
                 return x, y
     """
 
-    def calculate_angle(self, start_time, end_time):
-        dx = Trajectory.moverX[end_time] - Trajectory.moverX[start_time]
-        dy = Trajectory.moverY[end_time] - Trajectory.moverY[start_time]
+    def analyze_track(self):
+        track_segments = []
+        if Trajectory.end_of_track:
+            # set movement pattern
+            track_segments.append(self.get_movement_pattern())
+            Trajectory.start_time = Trajectory.end_time + 1
+            Trajectory.end_of_track = False
+            return track_segments
 
+            """""
+        i = 0
+        while i < len(self.coordinates):
+            current_coordinates = self.coordinates[i]
+            self.set_movement_pattern(current_coordinates)
+            if i % 40 == 39:
+                track_segments.append(self.get_movement_pattern(i - 39, i))
+            elif i + 1 == len(self.coordinates):
+                x = i % 40
+                track_segments.append(self.get_movement_pattern(i - x, i))
+            i += 1
+            """
+
+    def get_movement_pattern(self):
+        slope = self.calculate_slope()
+        Trajectory.slope.append(slope)
+        if slope > 0:
+            print(slope)
+            return "STRAIGHT"
+        elif slope == 0:
+            return None
+        else:
+            print(slope)
+            return "LEFT CURVE"
+
+    def calculate_slope(self):
+        # calculate x and y resp.
+        start_x, start_y = self.coordinates[Trajectory.start_time]
+        end_x, end_y = self.coordinates[Trajectory.end_time]
+
+        dx = end_x - start_x
+        dy = end_y - start_y
+
+        try:
+            slope = dx / dy
+            return slope
+        except ZeroDivisionError:
+            slope = dx
+            return slope
+
+        """""
+        if direction == "EAST":
+            # Marginal Slippage factor of 22.5 Degrees.
+            if 22.5 < abs(angle) < 67:
+                return "STRAIGHT , " + direction
+            elif abs(angle) > 67:
+                direction = "NORTH"
+                return "LEFT CURVE, " + direction
+        elif direction == "WEST":
+            if abs(angle) > 135:
+                direction = "SOUTH"
+                return "LEFT CURVE, " + direction
+            else:
+                return "STRAIGHT" + direction
+        elif direction == "NORTH":
+            if abs(angle) > 67:
+                direction = "WEST"
+                return "LEFT CURVE" + direction
+            elif abs(angle) < 67:
+                return "STRAIGHT, " + direction
+        elif direction == "SOUTH":
+            if abs(angle) 
+
+        return "Unknown Pattern"
+        """
+        """""
         # Calculate the angle in radians
         if dx != 0:
             angle = math.atan(dy / dx)
@@ -202,75 +293,19 @@ class Trajectory(DTROS):
         angle_degrees = math.degrees(angle)
 
         return angle_degrees
-
-    def set_movement_pattern(self, current_coordinates):
-        current_x, current_y = current_coordinates
-        # array of movement of x and y resp.
-        Trajectory.moverX.append(current_x)
-        Trajectory.moverY.append(current_y)
-
-    def get_movement_pattern(self, start_time, end_time, direction):
-        angle = self.calculate_angle(start_time, end_time)
-        angle_margin = 10
-
-        if direction == "EAST":
-            if abs(angle) <= angle_margin:
-                return "STRAIGHT , " + direction
-            elif angle > angle_margin + 90:
-                return "RIGHT CURVE , " + direction
-            elif angle < -angle_margin + 90:
-                return "LEFT CURVE"
-        elif direction == "WEST":
-            if abs(angle) <= angle_margin:
-                return "STRAIGHT"
-            elif angle > angle_margin:
-                return "LEFT CURVE"
-            elif angle < -angle_margin:
-                return "RIGHT CURVE"
-        elif direction == "NORTH":
-            if abs(angle) <= angle_margin:
-                return "STRAIGHT"
-            elif angle > angle_margin:
-                return "RIGHT CURVE"
-            elif angle < -angle_margin:
-                return "LEFT CURVE"
-        elif direction == "SOUTH":
-            if abs(angle) <= angle_margin:
-                return "STRAIGHT"
-            elif angle > angle_margin:
-                return "LEFT CURVE"
-            elif angle < -angle_margin:
-                return "RIGHT CURVE"
-
-        return "Unknown Pattern"
-
-    def analyze_track(self):
-        track_Segments = []
-        i = 0
-        while i < len(self.coordinates):
-            current_coordinates = self.coordinates[i]
-            self.set_movement_pattern(current_coordinates)
-            if i % 20 == 19:
-                track_Segments.append(self.get_movement_pattern(i - 19, i, Trajectory.direction))
-            elif i + 1 == len(self.coordinates):
-                x = i % 20
-                track_Segments.append(self.get_movement_pattern(i - x, i, Trajectory.direction))
-            i += 1
-        return track_Segments
+        """
 
     def run(self):
         # publish received tick messages every 0.05 second (20 Hz)
-        rate = rospy.Rate(30)
+        rate = rospy.Rate(20)
         i = 0
         while not rospy.is_shutdown():
             if self._ticks_right is not None and self._ticks_left is not None:
-                # start printing values when received from both encoders
                 i = i + 1
                 self.update()
-                print(self._ticks_left, self._ticks_right)
-                # track_segments = self.analyze_track()
+                track_segments = self.analyze_track()
                 if i == 40:
-                    # print(f"Track segments over the 10 seconds: {track_segments, Trajectory.direction}")
+                    print(f"Track segments over the 10 seconds: {track_segments}")
                     print(Trajectory.coordinates)
                     i = 0
             rate.sleep()
@@ -278,6 +313,6 @@ class Trajectory(DTROS):
 
 if __name__ == '__main__':
     # create the node
-    node = Trajectory(node_name='Trajectory', wheel_radius=3.25, wheel_distance=6.7, slippage_factor=0.95, speed=1)
+    node = Trajectory(node_name='Trajectory', wheel_radius=3.3, wheel_distance=10, slippage_factor=0.95, speed=1)
     node.run()
     rospy.spin()
