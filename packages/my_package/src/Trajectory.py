@@ -58,8 +58,9 @@ class Trajectory(DTROS):
         self.x = 0
         self.y = 0
         self.theta = 0
+        self.prev_theta = 0
         # distance per tick traveled
-        self.distance_per_count = 2 * math.pi * self.wheel_radius / 135
+        self.distance_per_count = (2 * math.pi * self.wheel_radius) / 135
 
         self.firstRight_tick = None
         self.firstLeft_tick = None
@@ -124,12 +125,15 @@ class Trajectory(DTROS):
 
         mean_distance = (sr + sl) / 2
 
-        self.x = self.x + sr * math.cos(self.theta)
-        self.y = self.y + sl * math.sin(self.theta)
+        self.x += sr * math.cos(self.theta)
+        self.y += sl * math.sin(self.theta)
         self.theta += (sr - sl) / self.wheel_distance
 
         # Ensure that theta is in the range [-pi, pi]
-        self.theta = (self.theta + math.pi) % (2 * math.pi) - math.pi
+        if self.theta > math.pi:
+            self.theta -= math.pi
+        elif self.theta < -math.pi:
+            self.theta += math.pi
 
         return self.x, self.y
 
@@ -237,7 +241,6 @@ class Trajectory(DTROS):
     def get_movement_pattern(self):
         if Trajectory.end_time != 0:
             slope = self.calculate_slope()
-            print(slope)
             if slope != 0:
                 Trajectory.slope.append(slope)
             """"
@@ -250,12 +253,12 @@ class Trajectory(DTROS):
                     return "LEFT CURVE"
             else:
             """
-            if slope > 2:
-                return "STRAIGHT"
+            if abs(slope) > 0.4:
+                return "LEFT CURVE"
             elif slope == 0:
                 return None
             else:
-                return "LEFT CURVE"
+                return "STRAIGHT"
 
     def calculate_slope(self):
         # calculate x and y resp.
@@ -267,7 +270,14 @@ class Trajectory(DTROS):
             dy = end_y - start_y
 
             try:
-                slope = dx / dy
+                # with theta find out direction of movement: important for tan
+                if - 0.8 < self.prev_theta < 0.8 or 1.8 <= self.prev_theta < 2.8:
+                    slope = math.atan(dy / dx)
+                else:
+                    slope = math.atan(dx / dy)
+
+                print(f"y: {dy} x: {dx} slope: {slope}")
+                self.prev_theta = self.theta
                 return slope
             except ZeroDivisionError:
                 slope = dx
