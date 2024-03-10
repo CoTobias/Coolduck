@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 class Trajectory(DTROS):
     coordinates = [(0.0, 0.0)]
+    track_coordinates = [(0.0, 0.0)]
     direction = ''
     moverX = []
     moverY = []
@@ -137,85 +138,6 @@ class Trajectory(DTROS):
 
         return self.x, self.y
 
-    """""
-    def calculate_coordinates(self):
-
-        self.right_ticks_change = self._ticks_right - self.right_ticks_change
-        self.left_ticks_change = self._ticks_left - self.left_ticks_change
-
-        # Check if the condition is met
-        if self.left_ticks_change == 0 and self.right_ticks_change == 0:  # what is one of them changed
-            self.a = True
-            return None  # or any other default value
-        else:
-            # check if previous value was 0 if yes do something
-            x = None
-            y = None
-            if self.a:
-                # see if really something changed
-                changeright_true = self._ticks_right - self.right_ticks_change_2
-                changeleft_true = self._ticks_left - self.left_ticks_change_2
-
-                if changeright_true == 0 and changeleft_true == 0:  # still zero
-                    return None
-                else:  # has been zero but changed
-                    # Calculate traveled distances for each wheel with slippage factor
-                    left_distance = 2 * self.wheel_radius * self._ticks_left * self.slippage_factor
-                    right_distance = 2 * self.wheel_radius * self._ticks_right * self.slippage_factor
-
-                    # Calculate linear and angular speed
-                    linear_speed = (left_distance + right_distance) / 2.0
-                    angular_speed = (right_distance - left_distance) / self.wheel_distance
-
-                    # Calculate time elapsed (assuming 20 Hz rate)
-                    time_elapsed = 1.0 / 20.0
-
-                    # Accumulate the values over time
-
-                    self.delta_x += linear_speed * time_elapsed * (self.speed / abs(self.speed))
-                    self.delta_theta += angular_speed * time_elapsed
-
-                    # Update the current position
-                    x = self.delta_x * math.cos(self.delta_theta)  # Update x based on the heading angle
-                    y = self.delta_x * math.sin(self.delta_theta)  # Update y based on the heading angle
-
-                    # if not null do this
-                    self.right_ticks_change = self._ticks_right
-                    self.left_ticks_change = self._ticks_left
-
-                    self.right_ticks_change_2 = self._ticks_right
-                    self.left_ticks_change_2 = self._ticks_left
-                    return x, y
-            else:
-                # Calculate traveled distances for each wheel with slippage factor
-                left_distance = 2 * self.wheel_radius * self._ticks_left * self.slippage_factor
-                right_distance = 2 * self.wheel_radius * self._ticks_right * self.slippage_factor
-
-                # Calculate linear and angular speed
-                linear_speed = (left_distance + right_distance) / 2.0
-                angular_speed = (right_distance - left_distance) / self.wheel_distance
-
-                # Calculate time elapsed (assuming 20 Hz rate)
-                time_elapsed = 1.0 / 20.0
-
-                # Accumulate the values over time
-
-                self.delta_x += linear_speed * time_elapsed * (self.speed / abs(self.speed))
-                self.delta_theta += angular_speed * time_elapsed
-
-                # Update the current position
-                x = self.delta_x * math.cos(self.delta_theta)  # Update x based on the heading angle
-                y = self.delta_x * math.sin(self.delta_theta)  # Update y based on the heading angle
-
-                # if not null do this
-                self.right_ticks_change = self._ticks_right
-                self.left_ticks_change = self._ticks_left
-
-                self.right_ticks_change_2 = self._ticks_right
-                self.left_ticks_change_2 = self._ticks_left
-                return x, y
-    """
-
     def analyze_track(self):
         if Trajectory.end_of_track:
             # set movement pattern
@@ -225,18 +147,20 @@ class Trajectory(DTROS):
             Trajectory.start_time = Trajectory.end_time
             return Trajectory.track_segments
 
-            """""
-        i = 0
-        while i < len(self.coordinates):
-            current_coordinates = self.coordinates[i]
-            self.set_movement_pattern(current_coordinates)
-            if i % 40 == 39:
-                track_segments.append(self.get_movement_pattern(i - 39, i))
-            elif i + 1 == len(self.coordinates):
-                x = i % 40
-                track_segments.append(self.get_movement_pattern(i - x, i))
-            i += 1
-            """
+    def make_track(self, pattern):
+        if Trajectory.end_of_track:
+            # set movement pattern
+            pattern = self.get_movement_pattern()
+            if pattern is not None:
+
+
+
+
+                Trajectory.track_segments.append(pattern)
+            return Trajectory.track_coordinates
+
+
+
 
     def get_movement_pattern(self):
         if Trajectory.end_time != 0:
@@ -282,6 +206,8 @@ class Trajectory(DTROS):
             except ZeroDivisionError:
                 slope = dx
                 return slope
+
+
 
         """""
         if direction == "EAST":
