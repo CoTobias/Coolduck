@@ -134,64 +134,70 @@ class Trajectory(DTROS):
     # Elementary Trajectory Model for the Differential Steering System of Robot Wheel Actuators
     # Source: https://rossum.sourceforge.net/papers/DiffSteer/
     def _calculate_coordinates(self, left_ticks_change, right_ticks_change):
-        # distance traveled with average distance per count calculated through distance_traveled/tick
+        # Distance traveled with average distance per count calculated through distance_traveled/tick
         sl = self.distance_per_count * left_ticks_change
-        sr = self.distance_per_count * right_ticks_change * 1.03
-
+        # Slippage factor of 1.03 calculated through various testing
+        sr = self.distance_per_count * right_ticks_change * 1.01
+        # Dead reckon of position ("estimate position without external references") using only wheel encoder
         mean_distance = (sr + sl) / 2
-
+        # Calculation of change in x and y coordinates
         self.x += mean_distance * math.cos(self.theta)
         self.y += mean_distance * math.sin(self.theta)
+        # Theta is used for orientation
         self.theta += (sr - sl) / self.wheel_distance
-
-        # Ensure that theta is in the range [-pi, pi]
         # Ensure that theta is in the range [-pi, pi]
         self.theta = (self.theta + math.pi) % (2 * math.pi) - math.pi
-
         return self.x, self.y
 
+    # Method that finds out what track pattern has been driven on and adds it to sequence of track types
     def analyze_track(self):
         if Trajectory.end_of_track:
-            # set movement pattern
+            # Method to find out what kind of track it was
             pattern = self.get_movement_pattern()
+            # To be sure that no "none" track is added
             if pattern is not None:
                 Trajectory.track_segments.append(pattern)
+                # Method to make approximate graph where the bot has driven on
                 self.make_track(pattern)
             Trajectory.start_time = Trajectory.end_time
             return Trajectory.track_segments
 
+    # Method to make approximate graph where the bot has driven on
     def make_track(self, pattern):
+        # Find out x and y at start, end time
         start_x, start_y = self.coordinates[Trajectory.start_time]
         end_x, end_y = self.coordinates[Trajectory.end_time]
 
         if Trajectory.end_of_track:
-            # set movement pattern
+            # Get movement pattern
             if pattern is not None:
                 if pattern == "STRAIGHT":
                     if Trajectory.east_west:
-                        # only x coordinate changes
+                        # Only x coordinate changes using Method that takes multiple coordinates along the line
                         line = self.generate_straight_line(start_x, start_y, end_x, start_y, 50)
+                        # Extend the coordinates with the ones just created
                         Trajectory.track_coordinates.extend(line)
                     else:
+                        # Only y coordinate changes using Method that takes multiple coordinates along the line
                         line = self.generate_straight_line(start_x, start_y, start_x, end_y, 50)
+                        # Extend the coordinates with the ones just created
                         Trajectory.track_coordinates.extend(line)
-                    # assign values
+                    # assign values to make sure there is no sudden change between the tracks
                     self.prev_y = start_y
                     self.prev_x = end_x
                 elif pattern == "LEFT CURVE":
-                    # adjust distance to adjust curvature
-                    distance = 25
-                    # Calculate midpoint of the line segment
+                    # Adjust distance to adjust curvature -> the bigger the more curvy
+                    distance = 20
+                    # Calculate midpoint of the track segment, helps ensure generated trajectory smoothly transitions
+                    # from previous point to the end point, avoiding abrupt changes in direction
                     mid_x = (self.prev_x + end_x) / 2
                     mid_y = (self.prev_y + end_y) / 2
-
-                    # Calculate the angle of the line segment
+                    # Calculate the angle of the track segment
                     angle = math.atan2(end_y - self.prev_y, end_x - self.prev_x)
-
-                    # Calculate control point
+                    # Calculate control point, which defines the shape of the curve
                     control_x = mid_x + distance * math.cos(angle - math.pi / 2)
                     control_y = mid_y + distance * math.sin(angle - math.pi / 2)
-
+                    # List of Curve points using Bezier curve
                     curve_points = self.generate_bezier_curve(self.prev_x, self.prev_y, end_x, end_y, control_x,
                                                               control_y, 80)
                     Trajectory.track_coordinates.extend(curve_points)
@@ -199,9 +205,9 @@ class Trajectory(DTROS):
                     # assign last value tp prev value
                     self.prev_x = end_x
                     self.prev_y = end_y
-        print(Trajectory.track_coordinates)
-        print("----------------------------------------------------------------------------------")
 
+    # Used to calculate coordinates for a smooth track outline based on start,end x,y
+    # https://javascript.info/bezier-curve, https://bezier.readthedocs.io/en/stable/python/reference/bezier.curve.html
     def generate_bezier_curve(self, start_x, start_y, end_x, end_y, control_x, control_y, num_points):
         # Generate points on the Bézier curve
         curve_points = []
@@ -209,76 +215,85 @@ class Trajectory(DTROS):
             x = (1 - t) ** 2 * start_x + 2 * (1 - t) * t * control_x + t ** 2 * end_x
             y = (1 - t) ** 2 * start_y + 2 * (1 - t) * t * control_y + t ** 2 * end_y
             curve_points.append((x, y))
-
         return curve_points
 
+    # Generate a straight line based on start,end x,y
     def generate_straight_line(self, start_x, start_y, end_x, end_y, num_points):
         # Calculate the slope
         slope = (end_y - start_y) / (end_x - start_x) if (end_x - start_x) != 0 else float('inf')
-
         # Calculate the y-intercept
         y_intercept = start_y - slope * start_x
-
         # Generate points along the line
         line_points = []
         for i in range(num_points):
             x = start_x + i * (end_x - start_x) / (num_points - 1)
             y = slope * x + y_intercept
             line_points.append((x, y))
-
         return line_points
 
-
+    # Get the Movement Pattern for method analyze_track
     def get_movement_pattern(self):
+        # If endtime is at 0 no track has been finished yet
         if Trajectory.end_time != 0:
             slope = self.calculate_slope()
             if abs(slope) > 0.3:
                 return "LEFT CURVE"
-            # right curve just without abs. and with east west check
             elif slope == 0:
                 return None
             else:
                 return "STRAIGHT"
 
+    # Slope important for movement pattern
     def calculate_slope(self):
-        # calculate x and y resp.
+        # Calculate x and y resp.
         if Trajectory.end_time != 0:
             start_x, start_y = self.coordinates[Trajectory.start_time]
             end_x, end_y = self.coordinates[Trajectory.end_time]
-
+            # Distances between end and start
             dx = end_x - start_x
             dy = end_y - start_y
-
+            # Need to use try as distance for dx could be 0
             try:
-                # with theta find out direction of movement: important for tan
+                # With theta find out direction of movement: important for tan
                 if -0.5 < self.prev_theta < 0.3 or 1.8 <= self.prev_theta < 2.3 or -math.pi < self.prev_theta < -2.5 or 2.9 < self.prev_theta < math.pi:
                     Trajectory.east_west = True
                     slope = math.atan(dy / dx)
                 else:
                     Trajectory.east_west = False
                     slope = math.atan(dx / dy)
-                # print(f"y: {dy} x: {dx} slope: {slope}")
-                print(f"slope {slope}" f" y {dy}" f" x {dx}" f" theta {self.prev_theta}")
+                # assign new to old theta
                 self.prev_theta = self.theta
                 return slope
             except ZeroDivisionError:
-                slope = dx
+                # Slope would be 0 and lead to "none" as track.
+                if -0.5 < self.prev_theta < 0.3 or 1.8 <= self.prev_theta < 2.3 or -math.pi < self.prev_theta < -2.5 or 2.9 < self.prev_theta < math.pi:
+                    Trajectory.east_west = True
+                    slope = dx
+                # Going north e.g
+                else:
+                    Trajectory.east_west = False
+                    slope = dy
                 return slope
 
+    # Run method
     def run(self):
-        # publish received tick messages every 0.05 second (20 Hz)
+        # Publish received tick messages every 0.05 second (20 Hz)
         rate = rospy.Rate(20)
-        i = 0
         while not rospy.is_shutdown():
             if self._ticks_right is not None and self._ticks_left is not None:
+                # Coordinates calulation
                 self.update()
+                # Track analyze, "original" track creation
                 self.analyze_track()
+                # Publish Coordinates for Mobile Application
                 message = f"{Trajectory.coordinates}!"
+                # Publish Coordinates for Mobile Application
                 self._publisher.publish(message)
                 if Trajectory.end_of_track:
                     print(f"Track segments traversed: {Trajectory.track_segments}")
-                    print(Trajectory.coordinates)
-                    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+                    print("----------------------------------------------------------------------------------")
+                    #print(f" Trajectory: Track Coordinates {Trajectory.track_coordinates}")
+                    #print("----------------------------------------------------------------------------------")
                     # End of track finished
                     Trajectory.end_of_track = False
             rate.sleep()
@@ -289,5 +304,4 @@ if __name__ == '__main__':
     node = Trajectory(node_name='Trajectory', wheel_radius=3.3, wheel_distance=10, slippage_factor=0.95, speed=1)
     node.run()
     rospy.spin()
-    #Trajectory.coordinates.append((0,0))
-    #print(Trajectory.coordinates)
+    Trajectory.coordinates.append((0,0))
