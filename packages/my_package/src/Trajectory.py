@@ -3,6 +3,7 @@
 import os
 import rospy
 import math
+from std_msgs.msg import String
 from duckietown.dtros import DTROS, NodeType
 from duckietown_msgs.msg import WheelEncoderStamped
 import matplotlib.pyplot as plt
@@ -35,6 +36,8 @@ class Trajectory(DTROS):
         self._vehicle_name = os.environ['VEHICLE_NAME']
         self._left_encoder_topic = f"/{self._vehicle_name}/left_wheel_encoder_node/tick"
         self._right_encoder_topic = f"/{self._vehicle_name}/right_wheel_encoder_node/tick"
+
+        self._publisher = rospy.Publisher('chatter', String, queue_size=10)
 
         # temporary data storage
         self._ticks_left = None
@@ -263,6 +266,8 @@ class Trajectory(DTROS):
                 self.update()
                 self.analyze_track()
                 if Trajectory.end_of_track:
+                    message = f"{Trajectory.coordinates}!"
+                    self._publisher.publish(message)
                     print(f"Track segments traversed: {Trajectory.track_segments}")
                     print(Trajectory.coordinates)
                     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
@@ -276,5 +281,5 @@ if __name__ == '__main__':
     node = Trajectory(node_name='Trajectory', wheel_radius=3.3, wheel_distance=10, slippage_factor=0.95, speed=1)
     node.run()
     rospy.spin()
-    Trajectory.coordinates.append((0,0))
-    print(Trajectory.coordinates)
+    #Trajectory.coordinates.append((0,0))
+    #print(Trajectory.coordinates)
