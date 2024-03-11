@@ -134,10 +134,8 @@ class Trajectory(DTROS):
         self.theta += (sr - sl) / self.wheel_distance
 
         # Ensure that theta is in the range [-pi, pi]
-        if self.theta > math.pi:
-            self.theta -= math.pi
-        elif self.theta < -math.pi:
-            self.theta += math.pi
+        # Ensure that theta is in the range [-pi, pi]
+        self.theta = (self.theta + math.pi) % (2 * math.pi) - math.pi
 
         return self.x, self.y
 
@@ -171,7 +169,7 @@ class Trajectory(DTROS):
                     Trajectory.prev_x = end_x
                 elif pattern == "LEFT CURVE":
                     # adjust distance to adjust curvature
-                    distance = 50
+                    distance = 25
                     # Calculate midpoint of the line segment
                     mid_x = (Trajectory.prev_x + end_x) / 2
                     mid_y = (Trajectory.prev_y + end_y) / 2
@@ -184,7 +182,7 @@ class Trajectory(DTROS):
                     control_y = mid_y + distance * math.sin(angle - math.pi / 2)
 
                     curve_points = self.generate_bezier_curve(Trajectory.prev_x, Trajectory.prev_y, end_x, end_y, control_x,
-                                                              control_y, 100)
+                                                              control_y, 80)
                     Trajectory.track_coordinates.extend(curve_points)
 
                     # assign last value tp prev value
@@ -242,7 +240,7 @@ class Trajectory(DTROS):
 
             try:
                 # with theta find out direction of movement: important for tan
-                if -0.4 < self.prev_theta < 0.3 or 1.8 <= self.prev_theta < 2.3:
+                if -0.5 < self.prev_theta < 0.3 or 1.8 <= self.prev_theta < 2.3 or -math.pi < self.prev_theta < -2.5 or 2.9 < self.prev_theta < math.pi:
                     Trajectory.east_west = True
                     slope = math.atan(dy / dx)
                 else:
@@ -264,7 +262,6 @@ class Trajectory(DTROS):
             if self._ticks_right is not None and self._ticks_left is not None:
                 self.update()
                 self.analyze_track()
-                print(f"{self.theta}")
                 if Trajectory.end_of_track:
                     print(f"Track segments traversed: {Trajectory.track_segments}")
                     print(Trajectory.coordinates)
@@ -279,3 +276,5 @@ if __name__ == '__main__':
     node = Trajectory(node_name='Trajectory', wheel_radius=3.3, wheel_distance=10, slippage_factor=0.95, speed=1)
     node.run()
     rospy.spin()
+    Trajectory.coordinates.append((0,0))
+    print(Trajectory.coordinates)
