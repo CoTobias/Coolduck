@@ -24,6 +24,9 @@ class Trajectory(DTROS):
     end_time = 0
     track_segments = []
     zähler = 0
+    east_west = True
+    prev_x = 0
+    prev_y = 0
 
     def __init__(self, node_name, wheel_radius, wheel_distance, slippage_factor, speed):
         # initialize the DTROS parent class
@@ -122,12 +125,12 @@ class Trajectory(DTROS):
     def _calculate_coordinates(self, left_ticks_change, right_ticks_change):
         # distance traveled with average distance per count calculated through distance_traveled/tick
         sl = self.distance_per_count * left_ticks_change
-        sr = self.distance_per_count * right_ticks_change
+        sr = self.distance_per_count * right_ticks_change * 1.03
 
         mean_distance = (sr + sl) / 2
 
-        self.x += sr * math.cos(self.theta)
-        self.y += sl * math.sin(self.theta)
+        self.x += mean_distance * math.cos(self.theta)
+        self.y += mean_distance * math.sin(self.theta)
         self.theta += (sr - sl) / self.wheel_distance
 
         # Ensure that theta is in the range [-pi, pi]
@@ -144,41 +147,85 @@ class Trajectory(DTROS):
             pattern = self.get_movement_pattern()
             if pattern is not None:
                 Trajectory.track_segments.append(pattern)
+                self.make_track(pattern)
             Trajectory.start_time = Trajectory.end_time
             return Trajectory.track_segments
 
     def make_track(self, pattern):
+        start_x, start_y = self.coordinates[Trajectory.start_time]
+        end_x, end_y = self.coordinates[Trajectory.end_time]
+
         if Trajectory.end_of_track:
             # set movement pattern
-            pattern = self.get_movement_pattern()
             if pattern is not None:
+                if pattern == "STRAIGHT":
+                    if Trajectory.east_west:
+                        # only x coordinate changes
+                        line = self.generate_straight_line(start_x, start_y, end_x, start_y, 50)
+                        Trajectory.track_coordinates.extend(line)
+                    else:
+                        line = self.generate_straight_line(start_x, start_y, start_x, end_y, 50)
+                        Trajectory.track_coordinates.extend(line)
+                    # assign values
+                    Trajectory.prev_y = start_y
+                    Trajectory.prev_x = end_x
+                elif pattern == "LEFT CURVE":
+                    # adjust distance to adjust curvature
+                    distance = 50
+                    # Calculate midpoint of the line segment
+                    mid_x = (Trajectory.prev_x + end_x) / 2
+                    mid_y = (Trajectory.prev_y + end_y) / 2
 
+                    # Calculate the angle of the line segment
+                    angle = math.atan2(end_y - Trajectory.prev_y, end_x - Trajectory.prev_x)
 
+                    # Calculate control point
+                    control_x = mid_x + distance * math.cos(angle - math.pi / 2)
+                    control_y = mid_y + distance * math.sin(angle - math.pi / 2)
 
+                    curve_points = self.generate_bezier_curve(Trajectory.prev_x, Trajectory.prev_y, end_x, end_y, control_x,
+                                                              control_y, 100)
+                    Trajectory.track_coordinates.extend(curve_points)
 
-                Trajectory.track_segments.append(pattern)
-            return Trajectory.track_coordinates
+                    # assign last value tp prev value
+                    Trajectory.prev_x = end_x
+                    Trajectory.prev_y = end_y
+        print(Trajectory.track_coordinates)
+        print("----------------------------------------------------------------------------------")
 
+    def generate_bezier_curve(self, start_x, start_y, end_x, end_y, control_x, control_y, num_points):
+        # Generate points on the Bézier curve
+        curve_points = []
+        for t in [i / (num_points - 1) for i in range(num_points)]:
+            x = (1 - t) ** 2 * start_x + 2 * (1 - t) * t * control_x + t ** 2 * end_x
+            y = (1 - t) ** 2 * start_y + 2 * (1 - t) * t * control_y + t ** 2 * end_y
+            curve_points.append((x, y))
 
+        return curve_points
+
+    def generate_straight_line(self, start_x, start_y, end_x, end_y, num_points):
+        # Calculate the slope
+        slope = (end_y - start_y) / (end_x - start_x) if (end_x - start_x) != 0 else float('inf')
+
+        # Calculate the y-intercept
+        y_intercept = start_y - slope * start_x
+
+        # Generate points along the line
+        line_points = []
+        for i in range(num_points):
+            x = start_x + i * (end_x - start_x) / (num_points - 1)
+            y = slope * x + y_intercept
+            line_points.append((x, y))
+
+        return line_points
 
 
     def get_movement_pattern(self):
         if Trajectory.end_time != 0:
             slope = self.calculate_slope()
-            if slope != 0:
-                Trajectory.slope.append(slope)
-            """"
-            if len(Trajectory.slope) > 1:
-                if Trajectory.slope[len(Trajectory.slope) - 1] > Trajectory.slope[len(Trajectory.slope) - 2] + 4:
-                    return "STRAIGHT"
-                elif slope == 0:
-                    return None
-                else:
-                    return "LEFT CURVE"
-            else:
-            """
-            if abs(slope) > 0.4:
+            if abs(slope) > 0.3:
                 return "LEFT CURVE"
+            # right curve just without abs. and with east west check
             elif slope == 0:
                 return None
             else:
@@ -195,56 +242,19 @@ class Trajectory(DTROS):
 
             try:
                 # with theta find out direction of movement: important for tan
-                if - 0.8 < self.prev_theta < 0.8 or 1.8 <= self.prev_theta < 2.8:
+                if -0.4 < self.prev_theta < 0.3 or 1.8 <= self.prev_theta < 2.3:
+                    Trajectory.east_west = True
                     slope = math.atan(dy / dx)
                 else:
+                    Trajectory.east_west = False
                     slope = math.atan(dx / dy)
-
-                print(f"y: {dy} x: {dx} slope: {slope}")
+                # print(f"y: {dy} x: {dx} slope: {slope}")
+                print(f"slope {slope}" f" y {dy}" f" x {dx}" f" theta {self.prev_theta}")
                 self.prev_theta = self.theta
                 return slope
             except ZeroDivisionError:
                 slope = dx
                 return slope
-
-
-
-        """""
-        if direction == "EAST":
-            # Marginal Slippage factor of 22.5 Degrees.
-            if 22.5 < abs(angle) < 67:
-                return "STRAIGHT , " + direction
-            elif abs(angle) > 67:
-                direction = "NORTH"
-                return "LEFT CURVE, " + direction
-        elif direction == "WEST":
-            if abs(angle) > 135:
-                direction = "SOUTH"
-                return "LEFT CURVE, " + direction
-            else:
-                return "STRAIGHT" + direction
-        elif direction == "NORTH":
-            if abs(angle) > 67:
-                direction = "WEST"
-                return "LEFT CURVE" + direction
-            elif abs(angle) < 67:
-                return "STRAIGHT, " + direction
-        elif direction == "SOUTH":
-            if abs(angle) 
-
-        return "Unknown Pattern"
-        """
-        """""
-        # Calculate the angle in radians
-        if dx != 0:
-            angle = math.atan(dy / dx)
-        else:
-            angle = math.atan(dy / 0.1)
-        # Convert the angle to degrees
-        angle_degrees = math.degrees(angle)
-
-        return angle_degrees
-        """
 
     def run(self):
         # publish received tick messages every 0.05 second (20 Hz)
@@ -254,9 +264,11 @@ class Trajectory(DTROS):
             if self._ticks_right is not None and self._ticks_left is not None:
                 self.update()
                 self.analyze_track()
+                print(f"{self.theta}")
                 if Trajectory.end_of_track:
-                    print(f"Track segments over the 10 seconds: {Trajectory.track_segments}")
+                    print(f"Track segments traversed: {Trajectory.track_segments}")
                     print(Trajectory.coordinates)
+                    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
                     # End of track finished
                     Trajectory.end_of_track = False
             rate.sleep()
