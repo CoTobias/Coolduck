@@ -102,6 +102,9 @@ class Trajectory(DTROS):
         # Just when change happens coordinates get appended, or else we would have 1000 points at the same value
         if result is not None:
             x, y = result
+            # Limit x and y to 2 decimal places
+            x = round(x, 3)
+            y = round(y, 3)
             Trajectory.coordinates.append((x, y))
 
     # Method that occupies with change of encoder value
@@ -228,7 +231,8 @@ class Trajectory(DTROS):
         for i in range(num_points):
             x = start_x + i * (end_x - start_x) / (num_points - 1)
             y = slope * x + y_intercept
-            line_points.append((x, y))
+            if isinstance(y, float):
+                line_points.append((x, y))
         return line_points
 
     # Get the Movement Pattern for method analyze_track
@@ -277,28 +281,41 @@ class Trajectory(DTROS):
 
     # Run method
     def run(self):
-        # Publish received tick messages every 0.05 second (20 Hz)
-        rate = rospy.Rate(20)
+
+        update_rate = rospy.Rate(20)  # Set the update rate to 20 Hz
+        i = 0
         while not rospy.is_shutdown():
             if self._ticks_right is not None and self._ticks_left is not None:
-                # Coordinates calulation
+                i = i + 1
+                # Coordinates calculation and track analysis
                 self.update()
-                # Track analyze, "original" track creation
                 self.analyze_track()
-                # Publish Coordinates for Mobile Application
-                message = f"{Trajectory.coordinates}!@@@{Trajectory.track_coordinates}!"
-                # Publish Coordinates for Mobile Application
-                self._publisher.publish(message)
+
+                if i == 5:
+                    # Prepare message for mobile application
+                    message = f"{Trajectory.coordinates}!@@@{Trajectory.track_coordinates}!"
+                    # Publish Coordinates for Mobile Application
+                    self._publisher.publish(message)
+                    i = 0
+
+                # Print trajectory information to console
+                print(f" Trajectory: Track Coordinates {Trajectory.coordinates}")
+                print("----------------------------------------------------------------------------------")
+
                 if Trajectory.end_of_track:
-                    print(Trajectory.track_coordinates)
-                    print("--------------------------------------------")
-                    print(f" Trajectory: Track Coordinates {Trajectory.coordinates}")
-                    print("----------------------------------------------------------------------------------")
-                    print(f"Track segments traversed: {Trajectory.track_segments}")
-                    print("----------------------------------------------------------------------------------")
-                    # End of track finished
+                    # Additional information to print when the end of the track is reached
+                    # Uncomment if needed
+                    # print(Trajectory.track_coordinates)
+                    # print("--------------------------------------------")
+                    # print(f" Trajectory: Track Coordinates {Trajectory.coordinates}")
+                    # print("----------------------------------------------------------------------------------")
+                    # print(f"Track segments traversed: {Trajectory.track_segments}")
+                    # print("----------------------------------------------------------------------------------")
+
+                    # Reset the end_of_track flag
                     Trajectory.end_of_track = False
-            rate.sleep()
+
+            update_rate.sleep()  # Control the update loop frequency
 
 
 if __name__ == '__main__':
@@ -306,4 +323,4 @@ if __name__ == '__main__':
     node = Trajectory(node_name='Trajectory', wheel_radius=3.3, wheel_distance=11)
     node.run()
     rospy.spin()
-    Trajectory.coordinates.append((0,0))
+    Trajectory.coordinates.append((0, 0))
