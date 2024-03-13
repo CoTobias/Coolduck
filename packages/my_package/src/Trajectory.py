@@ -30,7 +30,7 @@ class Trajectory(DTROS):
     # Important for calculation as slope calc. differs from east-west movement to North-South movement
     east_west = True
 
-    def __init__(self, node_name, wheel_radius, wheel_distance, slippage_factor, speed):
+    def __init__(self, node_name, wheel_radius, wheel_distance):
         # Initialize the DTROS parent class
         super(Trajectory, self).__init__(node_name=node_name, node_type=NodeType.PERCEPTION)
         # Vehicle name
@@ -135,9 +135,9 @@ class Trajectory(DTROS):
     # Source: https://rossum.sourceforge.net/papers/DiffSteer/
     def _calculate_coordinates(self, left_ticks_change, right_ticks_change):
         # Distance traveled with average distance per count calculated through distance_traveled/tick
-        sl = self.distance_per_count * left_ticks_change
+        sl = self.distance_per_count * left_ticks_change * 1.009
         # Slippage factor of 1.03 calculated through various testing
-        sr = self.distance_per_count * right_ticks_change * 1.01
+        sr = self.distance_per_count * right_ticks_change
         # Dead reckon of position ("estimate position without external references") using only wheel encoder
         mean_distance = (sr + sl) / 2
         # Calculation of change in x and y coordinates
@@ -187,7 +187,7 @@ class Trajectory(DTROS):
                     self.prev_x = end_x
                 elif pattern == "LEFT CURVE":
                     # Adjust distance to adjust curvature -> the bigger the more curvy
-                    distance = 20
+                    distance = 25
                     # Calculate midpoint of the track segment, helps ensure generated trajectory smoothly transitions
                     # from previous point to the end point, avoiding abrupt changes in direction
                     mid_x = (self.prev_x + end_x) / 2
@@ -286,14 +286,16 @@ class Trajectory(DTROS):
                 # Track analyze, "original" track creation
                 self.analyze_track()
                 # Publish Coordinates for Mobile Application
-                message = f"{Trajectory.coordinates}!"
+                message = f"{Trajectory.coordinates}!@@@{Trajectory.track_coordinates}!"
                 # Publish Coordinates for Mobile Application
                 self._publisher.publish(message)
                 if Trajectory.end_of_track:
+                    print(Trajectory.track_coordinates)
+                    print("--------------------------------------------")
+                    print(f" Trajectory: Track Coordinates {Trajectory.coordinates}")
+                    print("----------------------------------------------------------------------------------")
                     print(f"Track segments traversed: {Trajectory.track_segments}")
                     print("----------------------------------------------------------------------------------")
-                    #print(f" Trajectory: Track Coordinates {Trajectory.track_coordinates}")
-                    #print("----------------------------------------------------------------------------------")
                     # End of track finished
                     Trajectory.end_of_track = False
             rate.sleep()
@@ -301,7 +303,7 @@ class Trajectory(DTROS):
 
 if __name__ == '__main__':
     # create the node
-    node = Trajectory(node_name='Trajectory', wheel_radius=3.3, wheel_distance=10, slippage_factor=0.95, speed=1)
+    node = Trajectory(node_name='Trajectory', wheel_radius=3.3, wheel_distance=11)
     node.run()
     rospy.spin()
     Trajectory.coordinates.append((0,0))

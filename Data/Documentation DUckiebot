@@ -1,0 +1,18 @@
+
+
+Keyboard Control 
+dts duckiebot keyboard_control coolduck 
+
+Camera Control 
+dts start_gui_tools coolduck 
+rqt_image_view
+
+
+Run Trajectory
+dts devel build -f
+dts devel run -R coolduck -L trajectory
+
+
+dts devel run -H coolduck -L my-subscriber
+dts devel run -H coolduck -L basicPublisher -n publisher
+	
